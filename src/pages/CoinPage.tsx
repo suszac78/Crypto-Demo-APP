@@ -7,7 +7,7 @@ import { fetchHourly90d, toCandles } from '../lib/coingecko'
 import { analyze, type Timeframe } from '../lib/patterns'
 import { seriesFrom, sma } from '../lib/indicators'
 import type { Candle } from '../lib/types'
-import { fmtPrice, fmtUsd } from '../lib/format'
+import { fmtPrice, fmtMoney } from '../lib/format'
 import { CoinIcon, Flash, Icon, Pct, Segmented } from '../components/ui'
 import { PriceChart } from '../components/PriceChart'
 import { TradePanel, type TradePreset } from '../components/TradePanel'
@@ -15,7 +15,7 @@ import { PatternList, VerdictCard } from '../components/SignalPanel'
 
 export function CoinPage() {
   const { id = '' } = useParams()
-  const { byId, settings, lastUpdated, toggleWatch } = useMarket()
+  const { byId, settings, lastUpdated, toggleWatch, currency } = useMarket()
   const { acct } = usePortfolio()
   const coin = byId.get(id)
   const [tf, setTf] = useState<Timeframe>('1d')
@@ -29,13 +29,13 @@ export function CoinPage() {
   useEffect(() => {
     let alive = true
     setErr(null)
-    fetchHourly90d(id, apiKey)
+    fetchHourly90d(id, apiKey, currency)
       .then((d) => alive && setHourly(d))
       .catch((e) => alive && setErr(e instanceof Error ? e.message : 'Could not load chart data'))
     return () => {
       alive = false
     }
-  }, [id, apiKey, lastUpdated])
+  }, [id, apiKey, lastUpdated, currency])
 
   useEffect(() => {
     setActive(null)
@@ -101,8 +101,8 @@ export function CoinPage() {
           </div>
         </div>
         <div className="coin-head__stats">
-          <div><span>Market cap</span><span>{fmtUsd(coin.market_cap, { compact: true })}</span></div>
-          <div><span>24h volume</span><span>{fmtUsd(coin.total_volume, { compact: true })}</span></div>
+          <div><span>Market cap</span><span>{fmtMoney(coin.market_cap, { compact: true })}</span></div>
+          <div><span>24h volume</span><span>{fmtMoney(coin.total_volume, { compact: true })}</span></div>
           <div><span>24h range</span><span>{fmtPrice(coin.low_24h)} – {fmtPrice(coin.high_24h)}</span></div>
           <div><span>7d</span><span><Pct v={coin.price_change_percentage_7d_in_currency} /></span></div>
         </div>

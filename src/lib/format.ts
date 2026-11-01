@@ -1,10 +1,42 @@
-export function fmtUsd(n: number | null | undefined, opts: { compact?: boolean; sign?: boolean } = {}): string {
+// The display currency is set once by the market provider whenever prices load,
+// so every formatter below shows amounts in the currency the data is in.
+let CURRENCY = 'usd'
+export function setDisplayCurrency(code: string) {
+  CURRENCY = code
+}
+export function displayCurrency(): string {
+  return CURRENCY
+}
+
+/** Currencies like JPY and KRW have no minor unit, so whole amounts drop the decimals. */
+function wholeUnitCurrency(): boolean {
+  try {
+    return new Intl.NumberFormat('en-US', { style: 'currency', currency: CURRENCY.toUpperCase() }).resolvedOptions().maximumFractionDigits === 0
+  } catch {
+    return false
+  }
+}
+
+function money(n: number, min: number, max: number, compact = false): string {
+  if (Math.abs(n) >= 1 && wholeUnitCurrency()) min = max = 0
+  try {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: CURRENCY.toUpperCase(),
+      notation: compact ? 'compact' : 'standard',
+      minimumFractionDigits: Math.min(min, max),
+      maximumFractionDigits: max,
+    }).format(n)
+  } catch {
+    return `${n.toLocaleString('en-US', { maximumFractionDigits: max })} ${CURRENCY.toUpperCase()}`
+  }
+}
+
+export function fmtMoney(n: number | null | undefined, opts: { compact?: boolean; sign?: boolean } = {}): string {
   if (n == null || !isFinite(n)) return '—'
   const sign = opts.sign && n > 0 ? '+' : ''
-  if (opts.compact && Math.abs(n) >= 1e5) {
-    return sign + new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', notation: 'compact', maximumFractionDigits: 2 }).format(n)
-  }
-  return sign + new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n)
+  if (opts.compact && Math.abs(n) >= 1e5) return sign + money(n, 0, 2, true)
+  return sign + money(n, 2, 2)
 }
 
 /** Price formatting that keeps meaningful digits for sub-cent coins. */
@@ -16,7 +48,7 @@ export function fmtPrice(n: number | null | undefined): string {
   if (a < 0.01) digits = 6
   if (a < 0.0001) digits = 8
   if (a < 0.000001) digits = 10
-  return '$' + n.toLocaleString('en-US', { minimumFractionDigits: Math.min(digits, 2), maximumFractionDigits: digits })
+  return money(n, 2, digits)
 }
 
 export function fmtPct(n: number | null | undefined, digits = 2): string {

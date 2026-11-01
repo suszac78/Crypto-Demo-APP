@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { Coin, FundsEvent, Order, Position, Trade } from '../lib/types'
-import { fmtPrice, fmtQty, fmtUsd, uid } from '../lib/format'
+import { displayCurrency, fmtPrice, fmtQty, fmtMoney, uid } from '../lib/format'
 import { load, save } from './storage'
 import { useMarket } from './MarketContext'
 import { useToast } from './ToastContext'
@@ -13,10 +13,13 @@ export interface Account {
   trades: Trade[]
   funds: FundsEvent[]
   equityHistory: { t: number; v: number }[]
+  /** Currency every money amount in this account is stored in. */
+  currency: string
 }
 
 const START = 10_000
-const fresh = (cash = START): Account => ({
+const fresh = (cash = START, currency = 'usd'): Account => ({
+  currency,
   cash,
   netDeposits: cash,
   positions: {},
@@ -25,6 +28,24 @@ const fresh = (cash = START): Account => ({
   funds: [{ id: uid(), amount: cash, time: Date.now(), note: 'Starting balance' }],
   equityHistory: [],
 })
+
+/** Re-express every money amount in the account in another currency. */
+function convertAccount(a: Account, rate: number, currency: string): Account {
+  const m = (v: number | undefined) => (v == null ? v : v * rate)
+  const positions: Record<string, Position> = {}
+  for (const [k, p] of Object.entries(a.positions)) positions[k] = { ...p, avgCost: p.avgCost * rate, stopLoss: m(p.stopLoss), takeProfit: m(p.takeProfit) }
+  return {
+    ...a,
+    currency,
+    cash: a.cash * rate,
+    netDeposits: a.netDeposits * rate,
+    positions,
+    orders: a.orders.map((o) => ({ ...o, triggerPrice: o.triggerPrice * rate, usdAmount: m(o.usdAmount), stopLoss: m(o.stopLoss), takeProfit: m(o.takeProfit) })),
+    trades: a.trades.map((t) => ({ ...t, price: t.price * rate, fee: t.fee * rate, total: t.total * rate, realizedPnl: m(t.realizedPnl) })),
+    funds: a.funds.map((f) => ({ ...f, amount: f.amount * rate })),
+    equityHistory: a.equityHistory.map((e) => ({ ...e, v: e.v * rate })),
+  }
+}
 
 type Result = { ok: true; msg: string } | { ok: false; msg: string }
 
@@ -55,7 +76,7 @@ function coinMeta(c: Coin) {
 /** Pure trade helpers — return a new account or an error string. */
 function doBuy(a: Account, coin: Coin, usd: number, price: number, feePct: number, reason: string): { a: Account; trade: Trade } | string {
   if (!(usd > 0)) return 'Enter an amount greater than $0.'
-  if (usd > a.cash + 1e-9) return `Not enough cash. You have ${fmtUsd(a.cash)}.`
+  if (usd > a.cash + 1e-9) return `Not enough cash. You have ${fmtMoney(a.cash)}.`
   if (!(price > 0)) return 'No price available for this coin yet.'
   const fee = (usd * feePct) / 100
   const qty = (usd - fee) / price
@@ -90,7 +111,7 @@ function doSell(a: Account, coin: Pick<Coin, 'id' | 'symbol' | 'name' | 'image'>
 }
 
 export function PortfolioProvider({ children }: { children: ReactNode }) {
-  const { byId, settings, onPrices, coins } = useMarket()
+  const { byId, settings, onPrices, coins, currency, rate } = useMarket()
   const toast = useToast()
   const [acct, setAcctState] = useState<Account>(() => load('pd.account.v2', fresh()))
   const ref = useRef(acct)
@@ -106,10 +127,17 @@ export function PortfolioProvider({ children }: { children: ReactNode }) {
 
   /** Check pending orders and stop-loss / take-profit levels against fresh prices. */
   const process = useCallback(
-    (list: Coin[]) => {
+    (list: Coin[], cur: string) => {
       const map = new Map(list.map((c) => [c.id, c]))
       let a = ref.current
       const notes: { title: string; body: string; tone: 'bull' | 'bear' | 'info' }[] = []
+      // Prices now arrive in a different currency: convert the account first so every amount matches.
+      if (a.currency !== cur) {
+        const r = rate(a.currency, cur)
+        const from = a.currency
+        a = convertAccount(a, r, cur)
+        notes.push({ title: `Switched to ${cur.toUpperCase()}`, body: `Account converted from ${from.toUpperCase()} at 1 ${from.toUpperCase()} = ${r.toPrecision(5)} ${cur.toUpperCase()}`, tone: 'info' })
+      }
       const remaining: Order[] = []
       for (const o of a.orders) {
         const coin = map.get(o.coinId)
@@ -153,7 +181,7 @@ export function PortfolioProvider({ children }: { children: ReactNode }) {
         const r = doSell(a, { id: pos.coinId, symbol: pos.symbol, name: pos.name, image: pos.image }, pos.qty, px, feePct, reason)
         if (typeof r === 'string') continue
         a = r.a
-        notes.push({ title: reason, body: `Sold ${fmtQty(r.trade.qty)} ${pos.symbol.toUpperCase()} @ ${fmtPrice(px)} (${fmtUsd(r.trade.realizedPnl, { sign: true })})`, tone: reason.startsWith('Stop') ? 'bear' : 'bull' })
+        notes.push({ title: reason, body: `Sold ${fmtQty(r.trade.qty)} ${pos.symbol.toUpperCase()} @ ${fmtPrice(px)} (${fmtMoney(r.trade.realizedPnl, { sign: true })})`, tone: reason.startsWith('Stop') ? 'bear' : 'bull' })
       }
 
       // P&L snapshot for the portfolio chart.
@@ -164,7 +192,7 @@ export function PortfolioProvider({ children }: { children: ReactNode }) {
       setAcct(a)
       notes.forEach((n) => toast(n))
     },
-    [feePct, setAcct, toast],
+    [feePct, setAcct, toast, rate],
   )
 
   useEffect(() => onPrices(process), [onPrices, process])
@@ -186,7 +214,7 @@ export function PortfolioProvider({ children }: { children: ReactNode }) {
     if (typeof r === 'string') return { ok: false, msg: r }
     setAcct(r.a)
     const pnl = r.trade.realizedPnl ?? 0
-    return { ok: true, msg: `Sold ${fmtQty(r.trade.qty)} ${coin.symbol.toUpperCase()} @ ${fmtPrice(r.trade.price)} · P&L ${fmtUsd(pnl, { sign: true })}` }
+    return { ok: true, msg: `Sold ${fmtQty(r.trade.qty)} ${coin.symbol.toUpperCase()} @ ${fmtPrice(r.trade.price)} · P&L ${fmtMoney(pnl, { sign: true })}` }
   }
 
   const reservedCash = acct.orders.filter((o) => o.side === 'buy').reduce((s, o) => s + (o.usdAmount ?? 0), 0)
@@ -196,7 +224,7 @@ export function PortfolioProvider({ children }: { children: ReactNode }) {
     const a = ref.current
     const reserved = a.orders.filter((x) => x.side === 'buy').reduce((s, x) => s + (x.usdAmount ?? 0), 0)
     if (o.side === 'buy' && !((o.usdAmount ?? 0) > 0)) return { ok: false, msg: 'Enter an amount greater than $0.' }
-    if (o.side === 'buy' && (o.usdAmount ?? 0) > a.cash - reserved + 1e-9) return { ok: false, msg: `Not enough free cash (${fmtUsd(a.cash - reserved)} after open orders).` }
+    if (o.side === 'buy' && (o.usdAmount ?? 0) > a.cash - reserved + 1e-9) return { ok: false, msg: `Not enough free cash (${fmtMoney(a.cash - reserved)} after open orders).` }
     if (o.side === 'sell') {
       const pos = a.positions[o.coinId]
       if (!pos) return { ok: false, msg: `You don't hold any ${o.symbol.toUpperCase()}.` }
@@ -205,7 +233,7 @@ export function PortfolioProvider({ children }: { children: ReactNode }) {
     const order: Order = { ...o, id: uid(), createdAt: Date.now() }
     setAcct({ ...a, orders: [order, ...a.orders] })
     // If the condition is already met, it fills right away.
-    setTimeout(() => process(coins.length ? coins : [coin]), 0)
+    setTimeout(() => process(coins.length ? coins : [coin], currency), 0)
     return { ok: true, msg: `${o.type === 'limit' ? 'Limit' : 'Stop'} ${o.side} placed at ${fmtPrice(o.triggerPrice)}` }
   }
 
@@ -221,25 +249,25 @@ export function PortfolioProvider({ children }: { children: ReactNode }) {
   const adjustCash: PortfolioState['adjustCash'] = (amount, note) => {
     const a = ref.current
     if (!isFinite(amount) || amount === 0) return { ok: false, msg: 'Enter an amount.' }
-    if (a.cash + amount < 0) return { ok: false, msg: `You can withdraw at most ${fmtUsd(a.cash)}.` }
+    if (a.cash + amount < 0) return { ok: false, msg: `You can withdraw at most ${fmtMoney(a.cash)}.` }
     setAcct({
       ...a,
       cash: a.cash + amount,
       netDeposits: a.netDeposits + amount,
       funds: [{ id: uid(), amount, time: Date.now(), note: note ?? (amount > 0 ? 'Added funds' : 'Withdrew funds') }, ...a.funds].slice(0, 200),
     })
-    return { ok: true, msg: `${amount > 0 ? 'Added' : 'Withdrew'} ${fmtUsd(Math.abs(amount))}` }
+    return { ok: true, msg: `${amount > 0 ? 'Added' : 'Withdrew'} ${fmtMoney(Math.abs(amount))}` }
   }
 
   const setCash: PortfolioState['setCash'] = (value) => {
     if (!isFinite(value) || value < 0) return { ok: false, msg: 'Enter a balance of $0 or more.' }
     const diff = value - ref.current.cash
     if (Math.abs(diff) < 0.005) return { ok: true, msg: 'Balance unchanged' }
-    const r = adjustCash(diff, `Set cash to ${fmtUsd(value)}`)
-    return r.ok ? { ok: true, msg: `Cash balance set to ${fmtUsd(value)}` } : r
+    const r = adjustCash(diff, `Set cash to ${fmtMoney(value)}`)
+    return r.ok ? { ok: true, msg: `Cash balance set to ${fmtMoney(value)}` } : r
   }
 
-  const reset = (cash: number) => setAcct(fresh(cash))
+  const reset = (cash: number) => setAcct(fresh(cash, displayCurrency()))
 
   const holdingsValue = useMemo(() => Object.values(acct.positions).reduce((s, p) => s + p.qty * (priceOf(p.coinId) || p.avgCost), 0), [acct.positions, priceOf])
   const equity = acct.cash + holdingsValue

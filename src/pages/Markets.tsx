@@ -4,7 +4,7 @@ import { motion } from 'framer-motion'
 import { useMarket } from '../state/MarketContext'
 import { usePortfolio } from '../state/PortfolioContext'
 import type { Coin } from '../lib/types'
-import { fmtPrice, fmtUsd } from '../lib/format'
+import { fmtPrice, fmtMoney } from '../lib/format'
 import { CoinIcon, Icon, Pct, Segmented, Sparkline } from '../components/ui'
 
 type SortKey = 'rank' | 'price' | 'h1' | 'h24' | 'd7' | 'cap' | 'vol'
@@ -80,8 +80,8 @@ export function Markets() {
 
       <motion.div className="stats-row" initial="h" animate="s" variants={{ s: { transition: { staggerChildren: 0.06 } } }}>
         {[
-          { label: 'Demo equity', value: fmtUsd(equity), sub: <Pct v={pnlPct} /> },
-          { label: 'Trading P&L', value: <span className={pnl >= 0 ? 'up' : 'down'}>{fmtUsd(pnl, { sign: true })}</span>, sub: <span className="faint">since start</span> },
+          { label: 'Demo equity', value: fmtMoney(equity), sub: <Pct v={pnlPct} /> },
+          { label: 'Trading P&L', value: <span className={pnl >= 0 ? 'up' : 'down'}>{fmtMoney(pnl, { sign: true })}</span>, sub: <span className="faint">since start</span> },
           { label: 'Market breadth (24h)', value: <><span className="up">{breadth.up}</span><span className="faint"> / </span><span className="down">{breadth.down}</span></>, sub: <span className="faint">coins up / down</span> },
           { label: 'Top gainer (24h)', value: breadth.top ? breadth.top.symbol.toUpperCase() : '—', sub: <Pct v={breadth.top ? getters.h24(breadth.top) : null} /> },
         ].map((s) => (
@@ -151,8 +151,8 @@ export function Markets() {
                     <td><Pct v={c.price_change_percentage_1h_in_currency} /></td>
                     <td><Pct v={c.price_change_percentage_24h_in_currency ?? c.price_change_percentage_24h} /></td>
                     <td><Pct v={c.price_change_percentage_7d_in_currency} /></td>
-                    <td>{fmtUsd(c.market_cap, { compact: true })}</td>
-                    <td>{fmtUsd(c.total_volume, { compact: true })}</td>
+                    <td>{fmtMoney(c.market_cap, { compact: true })}</td>
+                    <td>{fmtMoney(c.total_volume, { compact: true })}</td>
                     <td><Sparkline data={c.sparkline_in_7d?.price} /></td>
                   </tr>
                 )

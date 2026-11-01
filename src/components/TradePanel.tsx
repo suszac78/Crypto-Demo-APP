@@ -4,7 +4,7 @@ import type { Coin, OrderType, Side } from '../lib/types'
 import { usePortfolio } from '../state/PortfolioContext'
 import { useMarket } from '../state/MarketContext'
 import { useToast } from '../state/ToastContext'
-import { fmtPct, fmtPrice, fmtQty, fmtUsd } from '../lib/format'
+import { displayCurrency, fmtPct, fmtPrice, fmtQty, fmtMoney } from '../lib/format'
 import { Segmented } from './ui'
 
 export interface TradePreset {
@@ -24,7 +24,7 @@ const priceStr = (p?: number | null) => (p == null || !isFinite(p) ? '' : String
 
 export function TradePanel({ coin, preset }: { coin: Coin; preset: TradePreset | null }) {
   const { acct, availableCash, buy, sell, placeOrder, cancelOrder, setExits } = usePortfolio()
-  const { settings } = useMarket()
+  const { settings, currency } = useMarket()
   const toast = useToast()
   const [side, setSide] = useState<Side>('buy')
   const [type, setType] = useState<'market' | OrderType>('market')
@@ -50,10 +50,14 @@ export function TradePanel({ coin, preset }: { coin: Coin; preset: TradePreset |
     setMsg(null)
   }, [preset])
 
+  // Typed prices and amounts belong to the old coin or currency, so start fresh.
   useEffect(() => {
     setMsg(null)
     setAmount('')
-  }, [coin.id])
+    setTrigger('')
+    setSl('')
+    setTp('')
+  }, [coin.id, currency])
 
   const execPrice = type === 'market' ? price : num(trigger) || price
   const amt = num(amount)
@@ -146,7 +150,7 @@ export function TradePanel({ coin, preset }: { coin: Coin; preset: TradePreset |
               <label htmlFor="trigger">{type === 'limit' ? 'Limit price' : 'Trigger price'}</label>
               <div className="input-wrap">
                 <input id="trigger" className="input" inputMode="decimal" placeholder={priceStr(price)} value={trigger} onChange={(e) => setTrigger(e.target.value)} />
-                <span>USD</span>
+                <span>{displayCurrency().toUpperCase()}</span>
               </div>
               {num(trigger) > 0 && <span className="hint" style={{ margin: 0 }}>{fmtPct(((num(trigger) - price) / price) * 100)} from current price</span>}
             </motion.div>
@@ -157,7 +161,7 @@ export function TradePanel({ coin, preset }: { coin: Coin; preset: TradePreset |
           <label htmlFor="amount">{side === 'buy' ? 'Amount to spend' : `Quantity to sell`}</label>
           <div className="input-wrap">
             <input id="amount" className="input" inputMode="decimal" placeholder="0.00" value={amount} onChange={(e) => setAmount(e.target.value)} />
-            <span>{side === 'buy' ? 'USD' : coin.symbol.toUpperCase()}</span>
+            <span>{side === 'buy' ? displayCurrency().toUpperCase() : coin.symbol.toUpperCase()}</span>
           </div>
         </div>
         <div className="pcts">
@@ -193,16 +197,16 @@ export function TradePanel({ coin, preset }: { coin: Coin; preset: TradePreset |
         <div className="divider" />
         {side === 'buy' ? (
           <>
-            <div className="kv"><span>Available cash</span><span>{fmtUsd(availableCash)}</span></div>
+            <div className="kv"><span>Available cash</span><span>{fmtMoney(availableCash)}</span></div>
             <div className="kv"><span>You get (est.)</span><span>{fmtQty(buyQty)} {coin.symbol.toUpperCase()}</span></div>
           </>
         ) : (
           <>
             <div className="kv"><span>You hold</span><span>{fmtQty(pos?.qty ?? 0)} {coin.symbol.toUpperCase()}</span></div>
-            <div className="kv"><span>You receive (est.)</span><span>{fmtUsd(sellProceeds)}</span></div>
+            <div className="kv"><span>You receive (est.)</span><span>{fmtMoney(sellProceeds)}</span></div>
           </>
         )}
-        <div className="kv"><span>Fee ({settings.feePct}%)</span><span>{fmtUsd(side === 'buy' ? (amt || 0) * fee : (amt || 0) * execPrice * fee)}</span></div>
+        <div className="kv"><span>Fee ({settings.feePct}%)</span><span>{fmtMoney(side === 'buy' ? (amt || 0) * fee : (amt || 0) * execPrice * fee)}</span></div>
 
         {msg && <div className={`msg ${msg.ok ? 'msg--ok' : 'msg--err'}`}>{msg.text}</div>}
         <motion.button whileHover={{ y: -1 }} whileTap={{ scale: 0.97 }} type="submit" className={`btn btn--block ${side === 'buy' ? 'btn--bull' : 'btn--bear'}`} disabled={!(amt > 0) || (type !== 'market' && !(num(trigger) > 0))}>
@@ -216,8 +220,8 @@ export function TradePanel({ coin, preset }: { coin: Coin; preset: TradePreset |
           <h3 style={{ margin: 0 }}>Your position</h3>
           <div className="kv"><span>Quantity</span><span>{fmtQty(pos.qty)}</span></div>
           <div className="kv"><span>Avg cost</span><span>{fmtPrice(pos.avgCost)}</span></div>
-          <div className="kv"><span>Value</span><span>{fmtUsd(pos.qty * price)}</span></div>
-          <div className="kv"><span>Unrealized P&L</span><span className={pnl >= 0 ? 'up' : 'down'}>{fmtUsd(pnl, { sign: true })} ({fmtPct(((price - pos.avgCost) / pos.avgCost) * 100)})</span></div>
+          <div className="kv"><span>Value</span><span>{fmtMoney(pos.qty * price)}</span></div>
+          <div className="kv"><span>Unrealized P&L</span><span className={pnl >= 0 ? 'up' : 'down'}>{fmtMoney(pnl, { sign: true })} ({fmtPct(((price - pos.avgCost) / pos.avgCost) * 100)})</span></div>
           <ExitsEditor key={`${pos.stopLoss}-${pos.takeProfit}`} stopLoss={pos.stopLoss} takeProfit={pos.takeProfit} onSave={(e) => (setExits(coin.id, e), toast({ title: 'Exits updated', tone: 'info' }))} />
         </>
       )}
@@ -231,7 +235,7 @@ export function TradePanel({ coin, preset }: { coin: Coin; preset: TradePreset |
               <span>
                 <span className={o.side === 'buy' ? 'up' : 'down'}>{o.type} {o.side}</span> @ {fmtPrice(o.triggerPrice)}
                 <br />
-                <span className="faint mono">{o.side === 'buy' ? fmtUsd(o.usdAmount) : `${fmtQty(o.qty ?? 0)} ${o.symbol.toUpperCase()}`}</span>
+                <span className="faint mono">{o.side === 'buy' ? fmtMoney(o.usdAmount) : `${fmtQty(o.qty ?? 0)} ${o.symbol.toUpperCase()}`}</span>
               </span>
               <button className="btn btn--sm btn--ghost" onClick={() => cancelOrder(o.id)}>Cancel</button>
             </div>

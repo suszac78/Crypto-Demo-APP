@@ -27,9 +27,9 @@ async function cg<T>(path: string, apiKey: string): Promise<T> {
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
 /** Top 500 coins by market cap (2 pages x 250, the API max page size). */
-export async function fetchTop500(apiKey: string | null): Promise<Coin[]> {
-  if (!apiKey) return mockMarkets()
-  const q = 'vs_currency=usd&order=market_cap_desc&per_page=250&sparkline=true&price_change_percentage=1h,24h,7d'
+export async function fetchTop500(apiKey: string | null, currency = 'usd'): Promise<Coin[]> {
+  if (!apiKey) return mockMarkets(Date.now(), currency)
+  const q = `vs_currency=${currency}&order=market_cap_desc&per_page=250&sparkline=true&price_change_percentage=1h,24h,7d`
   const page1 = await cg<Coin[]>(`/coins/markets?${q}&page=1`, apiKey)
   await sleep(400)
   const page2 = await cg<Coin[]>(`/coins/markets?${q}&page=2`, apiKey)
@@ -46,13 +46,13 @@ const chartCache = new Map<string, { at: number; data: MarketChart }>()
 const CHART_TTL = 5 * 60_000
 
 /** 90 days of hourly prices + volumes (CoinGecko auto-picks hourly for 2–90 days). */
-export async function fetchHourly90d(coinId: string, apiKey: string | null): Promise<MarketChart> {
-  const key = `${apiKey ? 'live' : 'sim'}:${coinId}`
+export async function fetchHourly90d(coinId: string, apiKey: string | null, currency = 'usd'): Promise<MarketChart> {
+  const key = `${apiKey ? 'live' : 'sim'}:${currency}:${coinId}`
   const hit = chartCache.get(key)
   if (hit && Date.now() - hit.at < CHART_TTL) return hit.data
   const data = apiKey
-    ? await cg<MarketChart>(`/coins/${encodeURIComponent(coinId)}/market_chart?vs_currency=usd&days=90`, apiKey)
-    : mockSeries(coinId, 24 * 90)
+    ? await cg<MarketChart>(`/coins/${encodeURIComponent(coinId)}/market_chart?vs_currency=${currency}&days=90`, apiKey)
+    : mockSeries(coinId, 24 * 90, Date.now(), currency)
   chartCache.set(key, { at: Date.now(), data })
   return data
 }

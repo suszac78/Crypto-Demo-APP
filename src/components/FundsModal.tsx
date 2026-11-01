@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { usePortfolio } from '../state/PortfolioContext'
-import { fmtUsd } from '../lib/format'
+import { displayCurrency, fmtMoney } from '../lib/format'
+import { niceAmount } from '../lib/currency'
 import { Icon, Segmented } from './ui'
 
 type Mode = 'add' | 'withdraw' | 'set'
@@ -42,7 +43,7 @@ export function FundsModal({ open, onClose }: { open: boolean; onClose: () => vo
             </button>
             <h2>Demo funds</h2>
             <p className="muted" style={{ margin: 0, fontSize: 'var(--fs-sm)' }}>
-              This is fake money for practice. Cash balance: <b className="mono">{fmtUsd(acct.cash)}</b>
+              This is fake money for practice. Cash balance: <b className="mono">{fmtMoney(acct.cash)}</b>
             </p>
             <Segmented
               full
@@ -58,13 +59,13 @@ export function FundsModal({ open, onClose }: { open: boolean; onClose: () => vo
               <label htmlFor="funds-amt">{mode === 'set' ? 'New cash balance' : 'Amount'}</label>
               <div className="input-wrap">
                 <input id="funds-amt" className="input" inputMode="decimal" autoFocus placeholder="0.00" value={amount} onChange={(e) => setAmount(e.target.value)} />
-                <span>USD</span>
+                <span>{displayCurrency().toUpperCase()}</span>
               </div>
             </div>
             <div className="pcts">
-              {[1000, 10000, 50000, 100000].map((v) => (
+              {[1000, 10000, 50000, 100000].map((usd) => niceAmount(usd, displayCurrency())).map((v) => (
                 <button type="button" key={v} onClick={() => setAmount(String(v))}>
-                  {fmtUsd(v, { compact: true }).replace('.00', '')}
+                  {fmtMoney(v, { compact: true }).replace('.00', '')}
                 </button>
               ))}
             </div>

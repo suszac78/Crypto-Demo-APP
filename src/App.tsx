@@ -9,8 +9,9 @@ import { CoinPage } from './pages/CoinPage'
 import { Portfolio } from './pages/Portfolio'
 import { Settings } from './pages/Settings'
 import { FundsModal } from './components/FundsModal'
-import { fmtUsd } from './lib/format'
+import { fmtMoney } from './lib/format'
 import { Pct } from './components/ui'
+import { CurrencySelect } from './components/CurrencySelect'
 
 function RefreshRing() {
   const { nextRefresh, loading, refresh, settings, lastUpdated } = useMarket()
@@ -82,14 +83,15 @@ function TopBar() {
         </nav>
         <div className="topbar__right">
           <RefreshRing />
+          <CurrencySelect id="currency-top" compact />
           <div className="acct-pill">
             <div className="acct-pill__val">
               <span>Equity</span>
-              <span>{fmtUsd(equity)} <Pct v={pnlPct} digits={1} /></span>
+              <span>{fmtMoney(equity)} <Pct v={pnlPct} digits={1} /></span>
             </div>
             <div className="acct-pill__val acct-pill__val--hide-sm">
               <span>Cash</span>
-              <span>{fmtUsd(acct.cash)}</span>
+              <span>{fmtMoney(acct.cash)}</span>
             </div>
             <motion.button whileTap={{ scale: 0.95 }} className="btn btn--sm btn--accent" onClick={() => setFunds(true)}>
               ± Funds
