@@ -4,8 +4,9 @@ import { motion } from 'framer-motion'
 import { createChart, type UTCTimestamp } from 'lightweight-charts'
 import { usePortfolio } from '../state/PortfolioContext'
 import { useMarket } from '../state/MarketContext'
-import { fmtPct, fmtPrice, fmtQty, fmtTime, fmtUsd } from '../lib/format'
+import { fmtPct, fmtPrice, fmtQty, fmtTime, fmtMoney } from '../lib/format'
 import { CoinIcon, Segmented } from '../components/ui'
+import { SignalChip } from '../components/SignalChip'
 import { FundsModal } from '../components/FundsModal'
 
 function EquityChart({ data }: { data: { t: number; v: number }[] }) {
@@ -42,7 +43,7 @@ function EquityChart({ data }: { data: { t: number; v: number }[] }) {
 
 export function Portfolio() {
   const { acct, equity, holdingsValue, pnl, pnlPct, reservedCash, cancelOrder } = usePortfolio()
-  const { byId } = useMarket()
+  const { byId, signals } = useMarket()
   const nav = useNavigate()
   const [tab, setTab] = useState<'trades' | 'orders' | 'funds'>('trades')
   const [funds, setFunds] = useState(false)
@@ -65,11 +66,11 @@ export function Portfolio() {
 
       <div className="stats-row">
         {[
-          ['Total equity', fmtUsd(equity), <span className="faint">cash + holdings</span>],
-          ['Cash', fmtUsd(acct.cash), <span className="faint">{reservedCash > 0 ? `${fmtUsd(reservedCash)} reserved for orders` : 'available to trade'}</span>],
-          ['Holdings value', fmtUsd(holdingsValue), <span className="faint">{positions.length} position{positions.length === 1 ? '' : 's'}</span>],
-          ['Total P&L', <span className={pnl >= 0 ? 'up' : 'down'}>{fmtUsd(pnl, { sign: true })}</span>, <span className={pnl >= 0 ? 'up' : 'down'}>{fmtPct(pnlPct)}</span>],
-          ['Realized P&L', <span className={realized >= 0 ? 'up' : 'down'}>{fmtUsd(realized, { sign: true })}</span>, <span className="faint">{winRate != null ? `${winRate.toFixed(0)}% winning sells` : 'no closed trades yet'}</span>],
+          ['Total equity', fmtMoney(equity), <span className="faint">cash + holdings</span>],
+          ['Cash', fmtMoney(acct.cash), <span className="faint">{reservedCash > 0 ? `${fmtMoney(reservedCash)} reserved for orders` : 'available to trade'}</span>],
+          ['Holdings value', fmtMoney(holdingsValue), <span className="faint">{positions.length} position{positions.length === 1 ? '' : 's'}</span>],
+          ['Total P&L', <span className={pnl >= 0 ? 'up' : 'down'}>{fmtMoney(pnl, { sign: true })}</span>, <span className={pnl >= 0 ? 'up' : 'down'}>{fmtPct(pnlPct)}</span>],
+          ['Realized P&L', <span className={realized >= 0 ? 'up' : 'down'}>{fmtMoney(realized, { sign: true })}</span>, <span className="faint">{winRate != null ? `${winRate.toFixed(0)}% winning sells` : 'no closed trades yet'}</span>],
         ].map(([l, v, s], i) => (
           <motion.div key={i} className="card stat" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}>
             <div className="stat__label">{l}</div>
@@ -83,6 +84,11 @@ export function Portfolio() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16, minWidth: 0 }}>
           <section className="card card__pad">
             <h3>Holdings</h3>
+            {positions.some((p) => signals.get(p.coinId)?.sell) && (
+              <div className="banner banner--bear" style={{ margin: '0 0 12px' }}>
+                <b>Sell signal:</b> {positions.filter((p) => signals.get(p.coinId)?.sell).map((p) => p.symbol.toUpperCase()).join(', ')} broke down from a bearish pattern. Consider selling or setting a stop-loss.
+              </div>
+            )}
             {positions.length === 0 ? (
               <div className="empty">
                 No holdings yet. <Link to="/">Pick a coin</Link> and make your first practice trade.
@@ -99,6 +105,7 @@ export function Portfolio() {
                       <th>Value</th>
                       <th>P&L</th>
                       <th>Stop / Target</th>
+                      <th>Signal</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -117,15 +124,16 @@ export function Portfolio() {
                           <td>{fmtQty(p.qty)}</td>
                           <td>{fmtPrice(p.avgCost)}</td>
                           <td>{fmtPrice(px)}</td>
-                          <td>{fmtUsd(p.qty * px)}</td>
+                          <td>{fmtMoney(p.qty * px)}</td>
                           <td className={pl >= 0 ? 'up' : 'down'}>
-                            {fmtUsd(pl, { sign: true })}
+                            {fmtMoney(pl, { sign: true })}
                             <br />
                             <span style={{ fontSize: 'var(--fs-xs)' }}>{fmtPct(((px - p.avgCost) / p.avgCost) * 100)}</span>
                           </td>
                           <td className="faint">
                             {p.stopLoss ? fmtPrice(p.stopLoss) : '—'} / {p.takeProfit ? fmtPrice(p.takeProfit) : '—'}
                           </td>
+                          <td><SignalChip signal={signals.get(p.coinId)} /></td>
                         </tr>
                       )
                     })}
@@ -165,9 +173,9 @@ export function Portfolio() {
                           <td className={t.side === 'buy' ? 'up' : 'down'}>{t.side.toUpperCase()}</td>
                           <td>{fmtQty(t.qty)}</td>
                           <td>{fmtPrice(t.price)}</td>
-                          <td>{fmtUsd(t.total)}</td>
-                          <td className="faint">{fmtUsd(t.fee)}</td>
-                          <td className={t.realizedPnl == null ? 'faint' : t.realizedPnl >= 0 ? 'up' : 'down'}>{t.realizedPnl == null ? '—' : fmtUsd(t.realizedPnl, { sign: true })}</td>
+                          <td>{fmtMoney(t.total)}</td>
+                          <td className="faint">{fmtMoney(t.fee)}</td>
+                          <td className={t.realizedPnl == null ? 'faint' : t.realizedPnl >= 0 ? 'up' : 'down'}>{t.realizedPnl == null ? '—' : fmtMoney(t.realizedPnl, { sign: true })}</td>
                           <td className="faint">{t.reason}</td>
                         </tr>
                       ))}
@@ -190,7 +198,7 @@ export function Portfolio() {
                           <td className={o.side === 'buy' ? 'up' : 'down'}>{o.type} {o.side}</td>
                           <td>{fmtPrice(o.triggerPrice)}</td>
                           <td className="faint">{fmtPrice(byId.get(o.coinId)?.current_price)}</td>
-                          <td>{o.side === 'buy' ? fmtUsd(o.usdAmount) : fmtQty(o.qty ?? 0)}</td>
+                          <td>{o.side === 'buy' ? fmtMoney(o.usdAmount) : fmtQty(o.qty ?? 0)}</td>
                           <td><button className="btn btn--sm btn--ghost" onClick={() => cancelOrder(o.id)}>Cancel</button></td>
                         </tr>
                       ))}
@@ -206,7 +214,7 @@ export function Portfolio() {
                     {acct.funds.map((f) => (
                       <tr key={f.id}>
                         <td className="faint" style={{ fontFamily: 'var(--mono)', textAlign: 'left' }}>{fmtTime(f.time)}</td>
-                        <td className={f.amount >= 0 ? 'up' : 'down'}>{fmtUsd(f.amount, { sign: true })}</td>
+                        <td className={f.amount >= 0 ? 'up' : 'down'}>{fmtMoney(f.amount, { sign: true })}</td>
                         <td style={{ textAlign: 'left', fontFamily: 'var(--font)' }} className="muted">{f.note}</td>
                       </tr>
                     ))}

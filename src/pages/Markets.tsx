@@ -4,14 +4,16 @@ import { motion } from 'framer-motion'
 import { useMarket } from '../state/MarketContext'
 import { usePortfolio } from '../state/PortfolioContext'
 import type { Coin } from '../lib/types'
-import { fmtPrice, fmtUsd } from '../lib/format'
+import { fmtPrice, fmtMoney } from '../lib/format'
 import { CoinIcon, Icon, Pct, Segmented, Sparkline } from '../components/ui'
+import { SignalChip } from '../components/SignalChip'
 
-type SortKey = 'rank' | 'price' | 'h1' | 'h24' | 'd7' | 'cap' | 'vol'
+type SortKey = 'rank' | 'price' | 'h1' | 'h24' | 'd7' | 'cap' | 'vol' | 'signal'
 type Filter = 'all' | 'watch' | 'gainers' | 'losers' | 'held'
+type SigFilter = 'any' | 'buy' | 'dont' | 'sell'
 const PAGE = 100
 
-const getters: Record<SortKey, (c: Coin) => number> = {
+const getters: Record<Exclude<SortKey, 'signal'>, (c: Coin) => number> = {
   rank: (c) => c.market_cap_rank ?? 9999,
   price: (c) => c.current_price,
   h1: (c) => c.price_change_percentage_1h_in_currency ?? -Infinity,
@@ -22,11 +24,12 @@ const getters: Record<SortKey, (c: Coin) => number> = {
 }
 
 export function Markets() {
-  const { coins, settings, toggleWatch, loading } = useMarket()
+  const { coins, settings, toggleWatch, loading, signals } = useMarket()
   const { acct, equity, pnl, pnlPct } = usePortfolio()
   const nav = useNavigate()
   const [q, setQ] = useState('')
   const [filter, setFilter] = useState<Filter>('all')
+  const [sig, setSig] = useState<SigFilter>('any')
   const [sort, setSort] = useState<{ key: SortKey; dir: 1 | -1 }>({ key: 'rank', dir: 1 })
   const [page, setPage] = useState(0)
 
@@ -36,12 +39,25 @@ export function Markets() {
     if (needle) list = list.filter((c) => c.name.toLowerCase().includes(needle) || c.symbol.toLowerCase().includes(needle))
     if (filter === 'watch') list = list.filter((c) => settings.watchlist.includes(c.id))
     if (filter === 'held') list = list.filter((c) => acct.positions[c.id])
+    if (sig === 'buy') list = list.filter((c) => signals.get(c.id)?.group === 'buy')
+    if (sig === 'dont') list = list.filter((c) => signals.get(c.id)?.group === 'dont')
+    if (sig === 'sell') list = list.filter((c) => signals.get(c.id)?.sell)
     let s = sort
     if (filter === 'gainers') s = { key: 'h24', dir: -1 }
     if (filter === 'losers') s = { key: 'h24', dir: 1 }
-    const g = getters[s.key]
+    const g = s.key === 'signal' ? (c: Coin) => signals.get(c.id)?.score ?? -Infinity : getters[s.key]
     return [...list].sort((a, b) => (g(a) - g(b)) * s.dir)
-  }, [coins, q, filter, sort, settings.watchlist, acct.positions])
+  }, [coins, q, filter, sig, sort, settings.watchlist, acct.positions, signals])
+
+  const sigCounts = useMemo(() => {
+    let buy = 0, dont = 0, sell = 0
+    for (const v of signals.values()) {
+      if (v.group === 'buy') buy++
+      else dont++
+      if (v.sell) sell++
+    }
+    return { buy, dont, sell }
+  }, [signals])
 
   const pages = Math.max(1, Math.ceil(rows.length / PAGE))
   const pg = Math.min(page, pages - 1)
@@ -80,8 +96,8 @@ export function Markets() {
 
       <motion.div className="stats-row" initial="h" animate="s" variants={{ s: { transition: { staggerChildren: 0.06 } } }}>
         {[
-          { label: 'Demo equity', value: fmtUsd(equity), sub: <Pct v={pnlPct} /> },
-          { label: 'Trading P&L', value: <span className={pnl >= 0 ? 'up' : 'down'}>{fmtUsd(pnl, { sign: true })}</span>, sub: <span className="faint">since start</span> },
+          { label: 'Demo equity', value: fmtMoney(equity), sub: <Pct v={pnlPct} /> },
+          { label: 'Trading P&L', value: <span className={pnl >= 0 ? 'up' : 'down'}>{fmtMoney(pnl, { sign: true })}</span>, sub: <span className="faint">since start</span> },
           { label: 'Market breadth (24h)', value: <><span className="up">{breadth.up}</span><span className="faint"> / </span><span className="down">{breadth.down}</span></>, sub: <span className="faint">coins up / down</span> },
           { label: 'Top gainer (24h)', value: breadth.top ? breadth.top.symbol.toUpperCase() : '—', sub: <Pct v={breadth.top ? getters.h24(breadth.top) : null} /> },
         ].map((s) => (
@@ -112,6 +128,29 @@ export function Markets() {
             ]}
           />
         </div>
+        <div className="toolbar toolbar--signals">
+          <span className="label">Pattern signal</span>
+          <Segmented
+            label="Pattern signal"
+            value={sig}
+            onChange={(v) => (setSig(v), setPage(0), v !== 'any' && setSort({ key: 'signal', dir: v === 'buy' ? -1 : 1 }))}
+            options={[
+              { value: 'any', label: 'Any' },
+              { value: 'buy', label: `Buy (${sigCounts.buy})` },
+              { value: 'dont', label: `Don't buy (${sigCounts.dont})` },
+              { value: 'sell', label: `Sell (${sigCounts.sell})` },
+            ]}
+          />
+          <span className="hint" style={{ margin: 0 }}>
+            {sig === 'buy'
+              ? 'A bullish pattern or a support level gives a buy plan. Open a coin for its entry, stop and target.'
+              : sig === 'dont'
+                ? 'No buy setup yet, or the chart leans bearish. Wait for a pattern to confirm.'
+                : sig === 'sell'
+                  ? 'A bearish pattern has broken down. If you hold these, consider selling or tightening your stop.'
+                  : 'Screened from each coin’s 7-day hourly chart every refresh. Coin pages show the full 90-day analysis.'}
+          </span>
+        </div>
         <div className="table-wrap">
           <table className="mkt">
             <thead>
@@ -125,6 +164,7 @@ export function Markets() {
                 {head('d7', '7d')}
                 {head('cap', 'Market cap')}
                 {head('vol', 'Volume 24h')}
+                {head('signal', 'Signal')}
                 <th style={{ cursor: 'default' }}>Last 7 days</th>
               </tr>
             </thead>
@@ -151,16 +191,17 @@ export function Markets() {
                     <td><Pct v={c.price_change_percentage_1h_in_currency} /></td>
                     <td><Pct v={c.price_change_percentage_24h_in_currency ?? c.price_change_percentage_24h} /></td>
                     <td><Pct v={c.price_change_percentage_7d_in_currency} /></td>
-                    <td>{fmtUsd(c.market_cap, { compact: true })}</td>
-                    <td>{fmtUsd(c.total_volume, { compact: true })}</td>
+                    <td>{fmtMoney(c.market_cap, { compact: true })}</td>
+                    <td>{fmtMoney(c.total_volume, { compact: true })}</td>
+                    <td><SignalChip signal={signals.get(c.id)} /></td>
                     <td><Sparkline data={c.sparkline_in_7d?.price} /></td>
                   </tr>
                 )
               })}
               {!shown.length && (
                 <tr>
-                  <td colSpan={10} className="empty">
-                    {coins.length === 0 ? (loading ? 'Loading the top 500 coins…' : 'No market data yet.') : filter === 'watch' ? 'Your watchlist is empty — tap ★ on any coin.' : filter === 'held' ? 'You have no holdings yet.' : 'No coins match your search.'}
+                  <td colSpan={11} className="empty">
+                    {coins.length === 0 ? (loading ? 'Loading the top 500 coins…' : 'No market data yet.') : filter === 'watch' ? 'Your watchlist is empty — tap ★ on any coin.' : filter === 'held' ? 'You have no holdings yet.' : sig !== 'any' ? 'No coins match this signal filter right now.' : 'No coins match your search.'}
                   </td>
                 </tr>
               )}

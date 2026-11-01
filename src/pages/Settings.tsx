@@ -2,7 +2,8 @@ import { useState } from 'react'
 import { useMarket } from '../state/MarketContext'
 import { usePortfolio } from '../state/PortfolioContext'
 import { useToast } from '../state/ToastContext'
-import { fmtTime, fmtUsd } from '../lib/format'
+import { displayCurrency, fmtTime, fmtMoney } from '../lib/format'
+import { CurrencySelect } from '../components/CurrencySelect'
 
 export function Settings() {
   const { settings, updateSettings, refresh, error, lastUpdated, simulated, coins } = useMarket()
@@ -48,6 +49,15 @@ export function Settings() {
             {lastUpdated ? ` · last update ${fmtTime(lastUpdated)}` : ''}{' '}
             <button className="btn btn--sm btn--ghost" onClick={refresh} style={{ marginLeft: 6 }}>Refresh now</button>
           </p>
+        </section>
+
+        <section className="card card__pad" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <h3 style={{ margin: 0 }}>Currency</h3>
+          <p>Prices, charts and your demo account all show in this currency. When you switch, your cash, holdings, orders and history convert at the current exchange rate.</p>
+          <div className="field" style={{ maxWidth: 320 }}>
+            <label htmlFor="currency-settings">Display currency</label>
+            <CurrencySelect id="currency-settings" />
+          </div>
         </section>
 
         <section className="card card__pad" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -97,10 +107,10 @@ export function Settings() {
 
         <section className="card card__pad" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <h3 style={{ margin: 0 }}>Reset demo account</h3>
-          <p>Wipes holdings, orders and history and starts fresh with a new cash balance. Current equity: {fmtUsd(equity)}.</p>
+          <p>Wipes holdings, orders and history and starts fresh with a new cash balance. Current equity: {fmtMoney(equity)}.</p>
           <div className="row">
             <div className="field">
-              <label htmlFor="start">Starting cash (USD)</label>
+              <label htmlFor="start">Starting cash ({displayCurrency().toUpperCase()})</label>
               <input id="start" className="input" inputMode="decimal" value={start} onChange={(e) => setStart(e.target.value)} />
             </div>
             <button
@@ -108,9 +118,9 @@ export function Settings() {
               onClick={() => {
                 const v = Number(start.replace(/[$,]/g, ''))
                 if (!(v >= 0)) return toast({ title: 'Enter a valid amount', tone: 'bear' })
-                if (confirm(`Reset your demo account to ${fmtUsd(v)}? This clears all trades and holdings.`)) {
+                if (confirm(`Reset your demo account to ${fmtMoney(v)}? This clears all trades and holdings.`)) {
                   reset(v)
-                  toast({ title: `Account reset to ${fmtUsd(v)}`, tone: 'info' })
+                  toast({ title: `Account reset to ${fmtMoney(v)}`, tone: 'info' })
                 }
               }}
             >

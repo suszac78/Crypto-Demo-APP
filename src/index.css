@@ -128,6 +128,8 @@ button, input, select { font: inherit; color: inherit; }
   background: rgba(5, 7, 12, 0.6); border: 1px solid var(--border-hi);
   font-family: var(--mono); font-size: var(--fs-sm); transition: border-color .2s;
 }
+.select { font-family: var(--font); cursor: pointer; }
+.select--compact { width: auto; padding: 7px 10px; font-family: var(--mono); font-size: var(--fs-xs); }
 .input:focus, .select:focus { outline: none; border-color: var(--accent); }
 .field { display: flex; flex-direction: column; gap: 6px; }
 .field label, .label { font-size: var(--fs-xs); color: var(--text-3); text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600; }
@@ -321,3 +323,10 @@ table.mkt tbody tr:hover { background: rgba(143, 155, 255, 0.05); }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }
+
+/* Signal screener */
+.toolbar--signals { padding-top: 0; gap: 10px 14px; }
+.toolbar--signals .hint { flex: 1 1 260px; }
+.sig { display: inline-flex; flex-direction: column; align-items: flex-end; gap: 3px; }
+.sig small { font-family: var(--font); font-size: 0.68rem; color: var(--text-3); max-width: 170px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.toolbar:has(+ .toolbar--signals) { border-bottom: 0; }

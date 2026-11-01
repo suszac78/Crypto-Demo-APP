@@ -1,6 +1,7 @@
 // Simulated market data, used when no CoinGecko key is set (or the API is unreachable).
 // Deterministic per coin so charts look stable between refreshes.
 import type { Coin } from './types'
+import { approxRate } from './currency'
 
 const SEED_COINS: [string, string, string, number][] = [
   ['bitcoin', 'btc', 'Bitcoin', 68000],
@@ -67,7 +68,8 @@ function coinList(): [string, string, string, number][] {
 const LIST = coinList()
 
 /** Hourly random walk for the last `hours`, ending at the coin's "now" price. */
-export function mockSeries(id: string, hours: number, nowMs = Date.now()): { prices: [number, number][]; total_volumes: [number, number][] } {
+export function mockSeries(id: string, hours: number, nowMs = Date.now(), currency = 'usd'): { prices: [number, number][]; total_volumes: [number, number][] } {
+  const fx = approxRate(currency)
   const base = LIST.find((c) => c[0] === id)?.[3] ?? 1
   const stable = id.includes('usd') || id === 'tether'
   const r = rng(hash(id))
@@ -88,8 +90,8 @@ export function mockSeries(id: string, hours: number, nowMs = Date.now()): { pri
   const baseVol = base * (stable ? 5e9 : 1e6 + r() * 5e7)
   for (let i = hours - 1; i >= 0; i--) {
     const t = end - (hours - 1 - i) * hourMs
-    prices.push([t, p])
-    vols.push([t, (baseVol / base) * p * (0.6 + Math.abs(rets[i]) / vol * 0.4 + r() * 0.3)])
+    prices.push([t, p * fx])
+    vols.push([t, fx * (baseVol / base) * p * (0.6 + Math.abs(rets[i]) / vol * 0.4 + r() * 0.3)])
     p = p / Math.exp(rets[i])
     if (stable) p = 1 + (p - 1) * 0.5
   }
@@ -107,9 +109,9 @@ function currentMockPrice(id: string, base: number, nowMs: number): number {
   return base * Math.exp(w)
 }
 
-export function mockMarkets(nowMs = Date.now()): Coin[] {
+export function mockMarkets(nowMs = Date.now(), currency = 'usd'): Coin[] {
   return LIST.map(([id, symbol, name, base], idx) => {
-    const series = mockSeries(id, 24 * 7, nowMs).prices.map((p) => p[1])
+    const series = mockSeries(id, 24 * 7, nowMs, currency).prices.map((p) => p[1])
     const price = series[series.length - 1]
     const p24 = series[series.length - 25] ?? price
     const p1 = series[series.length - 2] ?? price
