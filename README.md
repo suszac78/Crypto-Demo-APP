@@ -39,3 +39,11 @@ Each refresh uses 2 calls (250 coins per page). Every 5 minutes that's about 17k
 Vite, React, TypeScript, Framer Motion (micro-interactions, reduced-motion aware), TradingView Lightweight Charts. All account data is saved in `localStorage`.
 
 > Educational practice tool. Not financial advice.
+
+## Deploy to GitHub Pages
+
+1. Merge this branch into `main`.
+2. In the repo on GitHub: **Settings → Pages → Build and deployment → Source: GitHub Actions**.
+3. Every push to `main` now builds and publishes the site. To redeploy without a code change: **Actions → Deploy to GitHub Pages → Run workflow**.
+
+The site will be at `https://<your-username>.github.io/Crypto-Demo-APP/`. Enter your CoinGecko key on the site's Settings page. Don't bake it into the build, because anything in the built site is public.
