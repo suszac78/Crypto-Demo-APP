@@ -26,7 +26,7 @@ export function Settings() {
         <section className="card card__pad" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <h3 style={{ margin: 0 }}>CoinGecko API</h3>
           <p>
-            Paste your free CoinGecko <b>Demo</b> API key. It's stored only in this browser and sent only to api.coingecko.com. Without a key the app runs on simulated prices so you can still try everything.
+            Paste your free CoinGecko <b>Demo</b> API key. It's stored only in this browser and sent only to api.coingecko.com. Without a key the app runs on simulated prices so you can still try everything. Simulated and live prices each have their own demo account, so practice trades on made-up prices never mix with real ones.
           </p>
           <div className="row">
             <div className="field">

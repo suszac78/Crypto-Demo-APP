@@ -29,6 +29,11 @@ interface MarketState {
   currency: string
   /** Units of `to` per unit of `from`, from the latest loaded prices. */
   rate: (from: string, to: string) => number
+  /**
+   * True when the loaded prices are fresh and come from the current source
+   * (live vs simulated). Trades wait until then so they never use the wrong prices.
+   */
+  pricesReady: boolean
   /** Buy / don't buy / sell screen for every coin, from its 7-day chart. */
   signals: Map<string, Signal>
   refresh: () => void
@@ -61,18 +66,22 @@ export function MarketProvider({ children }: { children: ReactNode }) {
   const [lastUpdated, setLastUpdated] = useState<number | null>(cache.at)
   const [nextRefresh, setNextRefresh] = useState<number | null>(null)
   const listeners = useRef(new Set<(c: Coin[], cur: string) => void>())
-  const inflight = useRef(false)
+  // Each fetch gets a number; only the newest one may update prices, so a slow
+  // fetch started before a key or currency change can't overwrite newer data.
+  const latestReq = useRef(0)
+  const [dataSource, setDataSource] = useState<'live' | 'sim' | null>(cache.coins.length ? 'live' : null)
   const apiKey = settings.apiKey.trim() || null
   const wanted = isCurrency(settings.currency) ? settings.currency : 'usd'
 
   const refresh = useCallback(async () => {
-    if (inflight.current) return
-    inflight.current = true
+    const req = ++latestReq.current
     setLoading(true)
     try {
       const cur = wanted
       const data = await fetchTop500(apiKey, cur)
+      if (req !== latestReq.current) return
       refPrices.current[cur] = refsFrom(data)
+      setDataSource(apiKey ? 'live' : 'sim')
       setDisplayCurrency(cur)
       setCurrency(cur)
       setCoins(data)
@@ -82,10 +91,9 @@ export function MarketProvider({ children }: { children: ReactNode }) {
       if (apiKey) save('pd.marketCache', { coins: data, at, currency: cur })
       listeners.current.forEach((cb) => cb(data, cur))
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not reach CoinGecko')
+      if (req === latestReq.current) setError(e instanceof Error ? e.message : 'Could not reach CoinGecko')
     } finally {
-      inflight.current = false
-      setLoading(false)
+      if (req === latestReq.current) setLoading(false)
     }
   }, [apiKey, wanted])
 
@@ -166,6 +174,10 @@ export function MarketProvider({ children }: { children: ReactNode }) {
     currency,
     rate,
     signals,
+    pricesReady:
+      dataSource === (apiKey ? 'live' : 'sim') &&
+      lastUpdated != null &&
+      Date.now() - lastUpdated < (Math.max(1, settings.refreshMinutes) * 2 + 1) * 60_000,
     refresh,
     settings,
     updateSettings,

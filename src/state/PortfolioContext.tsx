@@ -18,6 +18,23 @@ export interface Account {
 }
 
 const START = 10_000
+
+function loadAccount(key: string): Account {
+  // Before live and simulated accounts were split, one account held both. Its
+  // trades may use simulated prices, so it becomes the simulated account.
+  if (key === 'pd.account.sim') {
+    try {
+      const legacy = localStorage.getItem('pd.account.v2')
+      if (legacy && !localStorage.getItem('pd.account.sim')) {
+        localStorage.setItem('pd.account.sim', legacy)
+        localStorage.removeItem('pd.account.v2')
+      }
+    } catch {
+      /* storage blocked: start fresh */
+    }
+  }
+  return load(key, fresh())
+}
 const fresh = (cash = START, currency = 'usd'): Account => ({
   currency,
   cash,
@@ -111,17 +128,31 @@ function doSell(a: Account, coin: Pick<Coin, 'id' | 'symbol' | 'name' | 'image'>
 }
 
 export function PortfolioProvider({ children }: { children: ReactNode }) {
-  const { byId, settings, onPrices, coins, currency, rate } = useMarket()
+  const { byId, settings, onPrices, coins, currency, rate, simulated, pricesReady } = useMarket()
   const toast = useToast()
-  const [acct, setAcctState] = useState<Account>(() => load('pd.account.v2', fresh()))
+  // Simulated and live prices get separate demo accounts, so coins bought at
+  // made-up prices are never valued at real ones (or the other way round).
+  const storeKey = simulated ? 'pd.account.sim' : 'pd.account.live'
+  const [acct, setAcctState] = useState<Account>(() => loadAccount(storeKey))
   const ref = useRef(acct)
+  const keyRef = useRef(storeKey)
   const feePct = settings.feePct
 
   const setAcct = useCallback((a: Account) => {
     ref.current = a
     setAcctState(a)
-    save('pd.account.v2', a)
+    save(keyRef.current, a)
   }, [])
+
+  useEffect(() => {
+    if (keyRef.current === storeKey) return
+    keyRef.current = storeKey
+    const a = loadAccount(storeKey)
+    ref.current = a
+    setAcctState(a)
+  }, [storeKey])
+
+  const stale = { ok: false as const, msg: 'Prices are still loading. Try again in a moment.' }
 
   const priceOf = useCallback((id: string) => byId.get(id)?.current_price ?? 0, [byId])
 
@@ -198,6 +229,7 @@ export function PortfolioProvider({ children }: { children: ReactNode }) {
   useEffect(() => onPrices(process), [onPrices, process])
 
   const buy: PortfolioState['buy'] = (coin, usd, exits) => {
+    if (!pricesReady) return stale
     const r = doBuy(ref.current, coin, usd, priceOf(coin.id) || coin.current_price, feePct, 'Market buy')
     if (typeof r === 'string') return { ok: false, msg: r }
     let a = r.a
@@ -210,6 +242,7 @@ export function PortfolioProvider({ children }: { children: ReactNode }) {
   }
 
   const sell: PortfolioState['sell'] = (coin, qty) => {
+    if (!pricesReady) return stale
     const r = doSell(ref.current, coin, qty, priceOf(coin.id) || coin.current_price, feePct, 'Market sell')
     if (typeof r === 'string') return { ok: false, msg: r }
     setAcct(r.a)
@@ -233,7 +266,7 @@ export function PortfolioProvider({ children }: { children: ReactNode }) {
     const order: Order = { ...o, id: uid(), createdAt: Date.now() }
     setAcct({ ...a, orders: [order, ...a.orders] })
     // If the condition is already met, it fills right away.
-    setTimeout(() => process(coins.length ? coins : [coin], currency), 0)
+    if (pricesReady) setTimeout(() => process(coins.length ? coins : [coin], currency), 0)
     return { ok: true, msg: `${o.type === 'limit' ? 'Limit' : 'Stop'} ${o.side} placed at ${fmtPrice(o.triggerPrice)}` }
   }
 
