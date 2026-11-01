@@ -12,7 +12,11 @@ import type { Analysis, Bias, Candle, Indicators, Level, Pattern, PatternLine, P
 import { atrPct, fitLine, lineAt, pivots, rsi, sma, type Pivot } from './indicators'
 import { clamp, fmtPrice } from './format'
 
-export type Timeframe = '4h' | '1d'
+export type Timeframe = '1h' | '4h' | '1d'
+
+export function tfLabel(tf: Timeframe): string {
+  return tf === '1d' ? 'daily' : tf === '4h' ? '4-hour' : '1-hour'
+}
 
 export const COLORS = {
   bull: '#2ee6a6',
@@ -36,6 +40,8 @@ interface Ctx {
 
 const PARAMS = {
   '1d': { w: 3, lookback: 90, maxAge: 18, minGap: 5, triWindow: 45, poleLen: 10, minPole: 0.12, consMax: 15, cupMin: 15, cupWindow: 90, minDepth: 0.12 },
+  // 7 days of hourly closes (the market list's sparkline), used by the screener.
+  '1h': { w: 4, lookback: 168, maxAge: 24, minGap: 6, triWindow: 72, poleLen: 12, minPole: 0.05, consMax: 24, cupMin: 30, cupWindow: 168, minDepth: 0.05 },
   '4h': { w: 5, lookback: 240, maxAge: 40, minGap: 10, triWindow: 120, poleLen: 18, minPole: 0.08, consMax: 30, cupMin: 40, cupWindow: 300, minDepth: 0.08 },
 }
 
@@ -685,7 +691,7 @@ export function analyze(candles: Candle[], tf: Timeframe): Analysis {
   if (av > 0) ind.volumeRatio = c[n - 1].volume / av
 
   if (n < 30) {
-    const ctx0 = { c, n, price, atr, tol: 0.02, piv: [], rsi: rs, recent: 0, tf, tfLabel: tf === '1d' ? 'daily' : '4-hour' } as Ctx
+    const ctx0 = { c, n, price, atr, tol: 0.02, piv: [], rsi: rs, recent: 0, tf, tfLabel: tfLabel(tf) } as Ctx
     return { patterns: [], levels: [], indicators: ind, plan: buildPlan(ctx0, [], [], ind) }
   }
   const allPiv = pivots(c, p.w).filter((x) => x.i >= n - p.lookback)
@@ -699,7 +705,7 @@ export function analyze(candles: Candle[], tf: Timeframe): Analysis {
     rsi: rs,
     recent: n - 1 - p.maxAge,
     tf,
-    tfLabel: tf === '1d' ? 'daily' : '4-hour',
+    tfLabel: tfLabel(tf),
   }
   let pats = [...headShoulders(ctx), ...doubles(ctx), ...trianglesWedges(ctx), ...flags(ctx), ...cupHandle(ctx)]
   // Flat highs with rising lows is a triangle, not a double top (and vice versa).

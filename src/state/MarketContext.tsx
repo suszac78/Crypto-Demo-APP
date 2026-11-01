@@ -4,6 +4,7 @@ import { fetchTop500 } from '../lib/coingecko'
 import { load, save } from './storage'
 import { setDisplayCurrency } from '../lib/format'
 import { approxRate, isCurrency } from '../lib/currency'
+import { computeSignals, type Signal } from '../lib/signals'
 
 export interface Settings {
   apiKey: string
@@ -28,6 +29,8 @@ interface MarketState {
   currency: string
   /** Units of `to` per unit of `from`, from the latest loaded prices. */
   rate: (from: string, to: string) => number
+  /** Buy / don't buy / sell screen for every coin, from its 7-day chart. */
+  signals: Map<string, Signal>
   refresh: () => void
   settings: Settings
   updateSettings: (s: Partial<Settings>) => void
@@ -145,6 +148,13 @@ export function MarketProvider({ children }: { children: ReactNode }) {
 
   const byId = useMemo(() => new Map(coins.map((c) => [c.id, c])), [coins])
 
+  // Screening 500 charts takes a moment, so run it just after the new prices render.
+  const [signals, setSignals] = useState<Map<string, Signal>>(() => new Map())
+  useEffect(() => {
+    const t = setTimeout(() => setSignals(computeSignals(coins)), 50)
+    return () => clearTimeout(t)
+  }, [coins])
+
   const value: MarketState = {
     coins,
     byId,
@@ -155,6 +165,7 @@ export function MarketProvider({ children }: { children: ReactNode }) {
     simulated: !apiKey,
     currency,
     rate,
+    signals,
     refresh,
     settings,
     updateSettings,

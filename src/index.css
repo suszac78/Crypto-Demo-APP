@@ -323,3 +323,10 @@ table.mkt tbody tr:hover { background: rgba(143, 155, 255, 0.05); }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }
+
+/* Signal screener */
+.toolbar--signals { padding-top: 0; gap: 10px 14px; }
+.toolbar--signals .hint { flex: 1 1 260px; }
+.sig { display: inline-flex; flex-direction: column; align-items: flex-end; gap: 3px; }
+.sig small { font-family: var(--font); font-size: 0.68rem; color: var(--text-3); max-width: 170px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.toolbar:has(+ .toolbar--signals) { border-bottom: 0; }

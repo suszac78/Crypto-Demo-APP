@@ -1,6 +1,6 @@
 import { motion } from 'framer-motion'
 import type { Analysis, Pattern } from '../lib/types'
-import { PATTERN_GUIDE, VERDICT_META, COLORS, type Timeframe } from '../lib/patterns'
+import { PATTERN_GUIDE, VERDICT_META, COLORS, tfLabel, type Timeframe } from '../lib/patterns'
 import { fmtPct, fmtPrice } from '../lib/format'
 import { BiasChip } from './ui'
 import type { TradePreset } from './TradePanel'
@@ -25,7 +25,7 @@ export function VerdictCard({ analysis, price, tf, onUsePlan }: Pick<Props, 'ana
   return (
     <motion.section className={`card verdict verdict--${meta.tone}`} {...fadeUp} transition={{ duration: 0.4 }} aria-labelledby="verdict-h">
       <div className="verdict__top">
-        <span className="label">Pattern coach · {tf === '1d' ? 'daily' : '4-hour'} chart</span>
+        <span className="label">Pattern coach · {tfLabel(tf)} chart</span>
         <BiasChip bias={meta.tone === 'bull' ? 'bullish' : meta.tone === 'bear' ? 'bearish' : meta.tone === 'warn' ? 'warn' : 'neutral'}>{meta.label}</BiasChip>
       </div>
       <h2 id="verdict-h">{plan.headline}</h2>
@@ -97,7 +97,7 @@ export function PatternList({ analysis, active, setActive, onUsePlan, tf }: Omit
         <h3>Detected patterns</h3>
         {patterns.length === 0 ? (
           <p className="muted" style={{ margin: 0, fontSize: 'var(--fs-sm)' }}>
-            No classic pattern is clear on the {tf === '1d' ? 'daily' : '4-hour'} chart right now. Try the other timeframe, or lean on the support / resistance levels above.
+            No classic pattern is clear on the {tfLabel(tf)} chart right now. Try the other timeframe, or lean on the support / resistance levels above.
           </p>
         ) : (
           <div className="patterns">

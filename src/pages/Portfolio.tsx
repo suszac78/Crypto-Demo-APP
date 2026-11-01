@@ -6,6 +6,7 @@ import { usePortfolio } from '../state/PortfolioContext'
 import { useMarket } from '../state/MarketContext'
 import { fmtPct, fmtPrice, fmtQty, fmtTime, fmtMoney } from '../lib/format'
 import { CoinIcon, Segmented } from '../components/ui'
+import { SignalChip } from '../components/SignalChip'
 import { FundsModal } from '../components/FundsModal'
 
 function EquityChart({ data }: { data: { t: number; v: number }[] }) {
@@ -42,7 +43,7 @@ function EquityChart({ data }: { data: { t: number; v: number }[] }) {
 
 export function Portfolio() {
   const { acct, equity, holdingsValue, pnl, pnlPct, reservedCash, cancelOrder } = usePortfolio()
-  const { byId } = useMarket()
+  const { byId, signals } = useMarket()
   const nav = useNavigate()
   const [tab, setTab] = useState<'trades' | 'orders' | 'funds'>('trades')
   const [funds, setFunds] = useState(false)
@@ -83,6 +84,11 @@ export function Portfolio() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16, minWidth: 0 }}>
           <section className="card card__pad">
             <h3>Holdings</h3>
+            {positions.some((p) => signals.get(p.coinId)?.sell) && (
+              <div className="banner banner--bear" style={{ margin: '0 0 12px' }}>
+                <b>Sell signal:</b> {positions.filter((p) => signals.get(p.coinId)?.sell).map((p) => p.symbol.toUpperCase()).join(', ')} broke down from a bearish pattern. Consider selling or setting a stop-loss.
+              </div>
+            )}
             {positions.length === 0 ? (
               <div className="empty">
                 No holdings yet. <Link to="/">Pick a coin</Link> and make your first practice trade.
@@ -99,6 +105,7 @@ export function Portfolio() {
                       <th>Value</th>
                       <th>P&L</th>
                       <th>Stop / Target</th>
+                      <th>Signal</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -126,6 +133,7 @@ export function Portfolio() {
                           <td className="faint">
                             {p.stopLoss ? fmtPrice(p.stopLoss) : '—'} / {p.takeProfit ? fmtPrice(p.takeProfit) : '—'}
                           </td>
+                          <td><SignalChip signal={signals.get(p.coinId)} /></td>
                         </tr>
                       )
                     })}
